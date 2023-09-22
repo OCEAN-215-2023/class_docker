@@ -1,114 +1,66 @@
-# Copyright (c) Jupyter Development Team.
-# Distributed under the terms of the Modified BSD License
-## modified for 2023 UW OCEAN 215 course.
-ARG OWNER=jupyter
-ARG BASE_CONTAINER=$OWNER/minimal-notebook
-# root container (docker-stacks-foundation) uses ubuntu:22.04
+ARG BASE_CONTAINER=jupyter/scipy-notebook:hub-3.1.1
 FROM $BASE_CONTAINER
 
 LABEL maintainer="Kathy Qi <klqi@uw.edu>"
 
-# establish shell
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# Base image includes: (https://jupyter-docker-stacks.readthedocs.io/en/latest/using/selecting.html#jupyter-tensorflow-notebook)
+# texlive, git, vi, nano, tzdata, unzip
+# dask, pandas, numexpr, matplotlib, scipy, seaborn, scikit-learn,
+# scikit-image, sympy, cython, patsy, statsmodels, cloudpickle, dill, numba,
+# bokeh, sqlalchemy, hdf5, vincent, beautifulsoup, protobuf, xlrd, bottleneck,
+# pytables, ipywidgets, ipympl, facets
 
-USER root
+RUN set -ex \
+  && mamba install --quiet --yes \
+  cartopy \  
+  cmocean \
+  cssselect \
+  dropbox \
+  hickle \
+  jupyter-dash \
+  jupyter-resource-usage \
+  lxml \
+  netcdf4 \
+  'plotly==5.14.1' \
+  plotnine \
+  requests \
+  shapely \
+  selenium \
+  textblob \
+  uncertainties \ 
+  xarray
 
-RUN apt-get update --yes && \
-    apt-get install -y vim gcc openssh-client build-essential texlive-xetex texlive-fonts-recommended texlive-plain-generic \
-    # apt-get install --yes --no-install-recommends 
-    # for cython: https://cython.readthedocs.io/en/latest/src/quickstart/install.html
-    build-essential \
-    # for latex labels
-    cm-super \
-    dvipng \
-    # for matplotlib anim
-    ffmpeg && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* 
-    #for vim
-    #apt-get install -y vim gcc openssh-client build-essential texlive-xetex texlive-fonts-recommended texlive-plain-generic
-
-
-USER ${NB_UID}
-
-# mamba downgrades these packages to previous major versions, which causes issues
-RUN echo 'jupyterlab >=4.0.4' >> "${CONDA_DIR}/conda-meta/pinned" && \
-    echo 'notebook >=7.0.2' >> "${CONDA_DIR}/conda-meta/pinned"
-
-# Install Python 3 packages
-RUN mamba install --yes \
-    'altair' \
-    'beautifulsoup4' \
-    'bokeh' \
-    'bottleneck' \
-    'cartopy' \
-    'cloudpickle' \
-    'conda-forge::blas=*=openblas' \
-    'cmocean' \
-    'cython' \
-    'dask' \
-    'dill' \
-    'dropbox' \
-    'h5py' \
-    'ipympl'\
-    'ipywidgets' \
-    'jupyter-dash' \
-    'jupyter-resource-usage' \
-    'jupyterlab-git' \
-    'matplotlib-base' \
-    'netcdf4' \
-    'numba' \
-    'numexpr' \
-    'openpyxl' \
-    'pandas' \
-    'patsy' \
-    'plotly==5.17.0' \
-    'protobuf' \
-    'pytables' \
-    'requests' \
-    'scikit-image' \
-    'scikit-learn' \
-    'scipy' \
-    'seaborn' \
-    'shapely' \
-    'sqlalchemy' \
-    'statsmodels' \
-    'sympy' \
-    'widgetsnbextension'\
-    'xarray'\
-    'xlrd' && \
-    mamba clean --all -f -y && \
-    rm -rf "/home/${NB_USER}/.cache/yarn" && \
-    rm -rf "/home/${NB_USER}/.node-gyp" && \
-    fix-permissions "${CONDA_DIR}" && \
-    fix-permissions "/home/${NB_USER}"
+RUN mamba clean --all -f -y \
+  && jupyter lab build -y \
+  && jupyter lab clean -y \
+  && rm -rf "/home/${NB_USER}/.cache/yarn" \
+  && rm -rf "/home/${NB_USER}/.node-gyp" \
+  && fix-permissions "${CONDA_DIR}" \
+  && fix-permissions "/home/${NB_USER}"
 
 # Install Python 3 packages
 RUN pip install \
   fuzzywuzzy \
   joblib \
-  nbclassic \
+  'nbclassic==0.3.7' \
+  nbgitpuller \
+  otter-grader \
   pqdm \
-  pyldavis \
   pycmap \
+  pyldavis \
   qgrid \
   requests-html \
   tqdm \
-  unidecode
+  unidecode && \
+  jupyter serverextension enable nbgitpuller --sys-prefix
 
-# Install facets which does not have a pip or conda package at the moment
-WORKDIR /tmp
-RUN git clone https://github.com/PAIR-code/facets && \
-    jupyter nbclassic-extension install facets/facets-dist/ --sys-prefix && \
-    rm -rf /tmp/facets && \
-    fix-permissions "${CONDA_DIR}" && \
-    fix-permissions "/home/${NB_USER}"
 
-# Import matplotlib the first time to build the font cache.
-ENV XDG_CACHE_HOME="/home/${NB_USER}/.cache/"
+USER root
 
-RUN MPLBACKEND=Agg python -c "import matplotlib.pyplot" && \
-    fix-permissions "/home/${NB_USER}"
+RUN apt-get update && apt-get install -y vim gcc openssh-client build-essential texlive-xetex texlive-fonts-recommended texlive-plain-generic
 
-USER ${NB_UID}
+# RUN echo 'export LD_LIBRARY_PATH=/usr/local/nvidia/lib64' >> /etc/profile
+# RUN echo 'export PATH=$PATH:/usr/local/nvidia/bin'>> /etc/profile
+# COPY kernel.json /opt/conda/share/jupyter/kernels/python3/kernel.json
 
-WORKDIR "${HOME}"
+USER $NB_UID
